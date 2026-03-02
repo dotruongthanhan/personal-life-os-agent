@@ -7,6 +7,21 @@ from discord.ext import tasks
 from weather_service import get_weather_forecast_string
 from google_services import get_upcoming_events
 
+import os
+import json
+
+# Nếu không tìm thấy file credentials.json (tức là đang chạy trên Cloud)
+if not os.path.exists('credentials.json'):
+    # Lấy nội dung từ biến môi trường và tạo file
+    cred_data = os.getenv('GOOGLE_CREDENTIALS_JSON', '{}')
+    with open('credentials.json', 'w') as f:
+        f.write(cred_data)
+
+if not os.path.exists('token.json'):
+    token_data = os.getenv('GOOGLE_TOKEN_JSON', '{}')
+    with open('token.json', 'w') as f:
+        f.write(token_data)
+
 # Nạp biến môi trường
 load_dotenv()
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
