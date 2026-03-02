@@ -4,8 +4,10 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from dotenv import load_dotenv
 
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+load_dotenv()
 
 def get_calendar_service():
     """Khởi tạo và xác thực dịch vụ Google Calendar API"""
@@ -32,6 +34,17 @@ def get_calendar_service():
     service = build('calendar', 'v3', credentials=creds)
     return service
 
+def get_calendar_ids_from_env():
+    """Quét và lấy tất cả giá trị của các biến bắt đầu bằng CALENDAR_ID_"""
+    calendar_ids = []
+    
+    # os.environ chứa tất cả biến môi trường hiện có
+    for key, value in os.environ.items():
+        if key.startswith("CALENDAR_ID_"):
+            calendar_ids.append(value)
+            
+    return calendar_ids
+
 def get_calendars():
     """Lấy danh sách các calendar của user"""
     service = get_calendar_service()
@@ -50,46 +63,53 @@ def get_upcoming_events():
     now = datetime.now(timezone.utc).isoformat()
     tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
     
-    events_result = service.events().list(
-        calendarId='primary', 
-        timeMin=now,
-        timeMax=tomorrow,
-        singleEvents=True,
-        orderBy='startTime'
-    ).execute()
-    
-    events = events_result.get('items', [])
+    calendar_ids = get_calendar_ids_from_env()
+    all_events = []
+    # 1. Lặp qua từng calendar để lấy sự kiện
+    for cal_id in calendar_ids:
+        try:
+            events_result = service.events().list(
+                calendarId=cal_id, 
+                timeMin=now,
+                timeMax=tomorrow,
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute()
+            
+            events = events_result.get('items', [])
+            all_events.extend(events) # Thêm vào danh sách tổng
+        except Exception as e:
+            print(f"⚠️ Lỗi khi đọc calendar {cal_id}: {e}")
 
-    if not events:
-        return ('📭 Không tìm thấy sự kiện nào sắp tới.')
+    if not all_events:
+        return '📭 Không tìm thấy sự kiện nào trong 24 giờ tới.'
 
-    # Tạo string
-    result = ("\n📅 --- LỊCH TRÌNH 24 GIỜ TỚI ---\n")
+    # 2. Sắp xếp tất cả sự kiện theo thời gian bắt đầu (startTime)
+    # Chúng ta dùng get('dateTime') cho sự kiện có giờ, và get('date') cho sự kiện cả ngày
+    all_events.sort(key=lambda x: x['start'].get('dateTime', x['start'].get('date')))
+
+    # 3. Tạo chuỗi kết quả trả về
+    result = "\n📅 --- LỊCH TRÌNH TỔNG HỢP 24 GIỜ TỚI ---\n"
     result_lines = []
-    for event in events:
-        # 1. Lấy dữ liệu thô và xử lý ký tự 'Z' (nếu có) để Python đọc được
+    
+    for event in all_events:
         start_raw = event['start'].get('dateTime', event['start'].get('date')).replace('Z', '+00:00')
         end_raw = event['end'].get('dateTime', event['end'].get('date')).replace('Z', '+00:00')
         
-        # 2. Chuyển đổi chuỗi thành object datetime
         start_dt = datetime.fromisoformat(start_raw)
         end_dt = datetime.fromisoformat(end_raw)
         
-        # 3. Format chỉ lấy Giờ:Phút (HH:MM)
         start_str = start_dt.strftime('%H:%M')
         end_str = end_dt.strftime('%H:%M')
         
-        # 4. Kiểm tra điều kiện qua ngày
         if end_dt.date() > start_dt.date():
             end_str += " +1 day"
             
-        # 5. Xử lý trường hợp event không có tiêu đề để tránh lỗi KeyError
         summary = event.get('summary', '(Không có tiêu đề)')
         
-        # 6. Format text theo yêu cầu và thêm vào list
-        result_lines.append(f"⏰ {start_str} to {end_str} | 📌 {summary}")
+        # (Tùy chọn) Hiển thị thêm tên Calendar nếu bạn muốn biết sự kiện thuộc lịch nào
+        result_lines.append(f"⏰ {start_str} - {end_str} | 📌 {summary}")
 
-    # 7. Trả về chuỗi kết quả
     return result + "\n".join(result_lines)
 
 # print(get_upcoming_events())
