@@ -10,6 +10,8 @@ from google_services import get_upcoming_events
 import os
 import json
 
+from keep_alive import keep_alive
+
 # Nếu không tìm thấy file credentials.json (tức là đang chạy trên Cloud)
 if not os.path.exists('credentials.json'):
     # Lấy nội dung từ biến môi trường và tạo file
@@ -127,4 +129,5 @@ async def send_weather_summary(target, city: str = 'hanoi'):
 
     await target.send(summary)
 
+keep_alive()
 client.run(TOKEN)
