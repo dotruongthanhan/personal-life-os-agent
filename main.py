@@ -4,7 +4,7 @@ import datetime
 from dotenv import load_dotenv
 from discord.ext import tasks
 
-# Import hàm lấy sự kiện sắp tới từ Google Calendar
+from weather_service import get_weather_forecast_string
 from google_services import get_upcoming_events
 
 # Nạp biến môi trường
@@ -79,6 +79,16 @@ async def on_message(message):
     if message.content == '!ping':
         await message.channel.send("Pong! (DM Mode)")
 
+    # Command: !weather [city]
+    if message.content.startswith('!weather'):
+        # Split and allow optional city argument
+        parts = message.content.split(maxsplit=1)
+        if len(parts) > 1:
+            await send_weather_summary(message.channel, parts[1].strip())
+        else:
+            # Let the helper's default city value apply
+            await send_weather_summary(message.channel)
+
     if message.content == '!briefing':
         await message.channel.send("🔄 Đang trích xuất dữ liệu Google Calendar...")
         try:
@@ -86,5 +96,20 @@ async def on_message(message):
             await execute_briefing_logic(message.channel)
         except Exception as e:
             await message.channel.send(f"❌ Lỗi khi lấy dữ liệu: {e}")
+
+
+async def send_weather_summary(target, city: str = 'hanoi'):
+    """Fetches today's weather summary (blocking call run in executor)
+    and sends the returned text to `target` (a Channel or User).
+    """
+    loop = client.loop
+    # Run the blocking network call in the default executor
+    summary = await loop.run_in_executor(None, get_weather_forecast_string, city)
+
+    # Ensure we have some text to send
+    if not summary:
+        summary = "⚠️ Không thể lấy dữ liệu thời tiết vào lúc này."
+
+    await target.send(summary)
 
 client.run(TOKEN)
