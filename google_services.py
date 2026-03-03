@@ -117,4 +117,4 @@ def get_upcoming_events():
 
     return result + "\n".join(result_lines)
 
-print(get_upcoming_events())
+# print(get_upcoming_events())
