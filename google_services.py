@@ -89,7 +89,7 @@ def get_upcoming_events():
     all_events.sort(key=lambda x: x['start'].get('dateTime', x['start'].get('date')))
 
     # 3. Tạo chuỗi kết quả trả về
-    result = "\n📅 --- LỊCH TRÌNH TỔNG HỢP 24 GIỜ TỚI ---\n"
+    result = ""
     result_lines = []
     
     for event in all_events:

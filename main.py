@@ -27,13 +27,25 @@ if not os.path.exists('token.json'):
 # Nạp biến môi trường
 load_dotenv()
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
-USER_ID = os.getenv('DISCORD_USER_ID')
+# Support either DISCORD_USER_ID (single or comma-separated) or DISCORD_USER_IDS
+user_ids_raw = os.getenv('DISCORD_USER_ID') or os.getenv('DISCORD_USER_IDS')
 
-if not TOKEN or not USER_ID:
-    raise ValueError("Lỗi: Thiếu TOKEN hoặc USER_ID trong file .env")
+if not TOKEN or not user_ids_raw:
+    raise ValueError("Lỗi: Thiếu TOKEN hoặc DISCORD_USER_ID(S) trong file .env")
 
-# Ép kiểu USER_ID về dạng số nguyên
-USER_ID = int(USER_ID)
+# Parse comma-separated IDs and coerce to ints, ignoring invalid entries
+USER_IDS = []
+for part in user_ids_raw.split(','):
+    part = part.strip()
+    if not part:
+        continue
+    try:
+        USER_IDS.append(int(part))
+    except ValueError:
+        continue
+
+if not USER_IDS:
+    raise ValueError("Lỗi: Không tìm thấy USER_ID hợp lệ trong DISCORD_USER_ID(S)")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -56,10 +68,15 @@ async def execute_briefing_logic(destination):
 @tasks.loop(time=run_time) # Hẹn giờ gửi message lúc 6h sáng
 async def daily_briefing():
     try:
-        user = await client.fetch_user(USER_ID)
-        if user:
-            await execute_briefing_logic(user)
-            print("System: Đã gửi báo cáo định kỳ 6:00 AM thành công.")
+        for uid in USER_IDS:
+            try:
+                user = await client.fetch_user(uid)
+                if user:
+                    await user.send("**🔔 Chào buổi sáng! Đây là báo cáo lịch trình hàng ngày của bạn.**")
+                    await execute_briefing_logic(user)
+                    print(f"System: Đã gửi báo cáo định kỳ 6:00 AM cho {user.name} ({uid}).")
+            except Exception as e:
+                print(f"Lỗi khi gửi báo cáo cho {uid}: {e}")
     except Exception as e:
         print(f"Lỗi Cronjob: {e}")
 
@@ -74,15 +91,20 @@ async def on_ready():
         print(f"System: Cronjob lúc {run_time.strftime('%H:%M:%S')} (UTC+7) mỗi ngày.")
 
     try:
-        user = await client.fetch_user(USER_ID)
-        if user:
-            instructions = (
-                "🟢 **[SYSTEM ONLINE] Life-OS Agent đã khởi động thành công!**\n\n"
-                "🛠️ **DANH SÁCH LỆNH ĐIỀU KHIỂN:**\n"
-                "▸ `!ping` : Kiểm tra kết nối và độ trễ của Bot.\n"
-                "▸ `!briefing` : Trích xuất và gửi ngay báo cáo lịch trình 24h tới.\n"
-            )
-            await user.send(instructions)
+        for uid in USER_IDS:
+            try:
+                user = await client.fetch_user(uid)
+                if user:
+                    instructions = (
+                        "🟢 **[SYSTEM ONLINE] Life-OS Agent đã khởi động thành công!**\n\n"
+                        "🛠️ **DANH SÁCH LỆNH ĐIỀU KHIỂN:**\n"
+                        "▸ `!ping` : Kiểm tra kết nối và độ trễ của Bot.\n"
+                        "▸ `!weather [city]` : Lấy thông tin thời tiết cho thành phố cụ thể.\n"
+                        "▸ `!briefing` : Trích xuất và gửi ngay báo cáo lịch trình 24h tới.\n"
+                    )
+                    await user.send(instructions)
+            except Exception as e:
+                print(f"Lỗi khi gửi tin nhắn hướng dẫn cho {uid}: {e}")
     except Exception as e:
         print(f"Lỗi khi gửi tin nhắn hướng dẫn: {e}")
 
