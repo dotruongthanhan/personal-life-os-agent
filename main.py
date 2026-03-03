@@ -53,7 +53,7 @@ client = discord.Client(intents=intents)
 
 # Cấu hình múi giờ (UTC+7)
 vn_timezone = datetime.timezone(datetime.timedelta(hours=7))
-run_time = datetime.time(hour=6, minute=0, second=0, tzinfo=vn_timezone)
+run_time = datetime.time(hour=8, minute=0, second=0, tzinfo=vn_timezone)
 
 # ---------------------------------------------------------
 # ĐỊNH NGHĨA TÁC VỤ NỀN (CRONJOB) -> GỬI DM
@@ -65,7 +65,7 @@ async def execute_briefing_logic(destination):
     message = f"🌅 **[Life-OS Daily Briefing]**\n\n📅 **LỊCH TRÌNH 24 GIỜ TỚI:**\n{calendar_data}"
     await destination.send(message)
 
-@tasks.loop(time=run_time) # Hẹn giờ gửi message lúc 6h sáng
+@tasks.loop(time=run_time) # Hẹn giờ gửi message lúc 8h sáng
 async def daily_briefing():
     try:
         for uid in USER_IDS:
@@ -74,7 +74,7 @@ async def daily_briefing():
                 if user:
                     await user.send("**🔔 Chào buổi sáng! Đây là báo cáo lịch trình hàng ngày của bạn.**")
                     await execute_briefing_logic(user)
-                    print(f"System: Đã gửi báo cáo định kỳ 6:00 AM cho {user.name} ({uid}).")
+                    print(f"System: Đã gửi báo cáo định kỳ 8:00 AM cho {user.name} ({uid}).")
             except Exception as e:
                 print(f"Lỗi khi gửi báo cáo cho {uid}: {e}")
     except Exception as e:
@@ -96,10 +96,11 @@ async def on_ready():
                 user = await client.fetch_user(uid)
                 if user:
                     instructions = (
-                        "🟢 **[SYSTEM ONLINE] Life-OS Agent đã khởi động thành công!**\n\n"
+                        "🟢 **[SYSTEM ONLINE] Life-OS Agent đã khởi động thành công!**\n"
+                        f"⏰ Thông báo hàng ngày sẽ được gửi lúc {run_time.strftime('%H:%M:%S')} sáng (UTC+7)\n\n"
                         "🛠️ **DANH SÁCH LỆNH ĐIỀU KHIỂN:**\n"
                         "▸ `!ping` : Kiểm tra kết nối và độ trễ của Bot.\n"
-                        "▸ `!weather [city]` : Lấy thông tin thời tiết cho thành phố cụ thể.\n"
+                        "▸ `!weather [city]` : Lấy thông tin thời tiết cho thành phố cụ thể (Mặc định: Hà Nội).\n"
                         "▸ `!briefing` : Trích xuất và gửi ngay báo cáo lịch trình 24h tới.\n"
                     )
                     await user.send(instructions)
@@ -114,7 +115,7 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    # Nếu chat !ping trong DM, bot vẫn trả lời trong DM
+    # Command: !ping
     if message.content == '!ping':
         await message.channel.send("Pong! (DM Mode)")
 

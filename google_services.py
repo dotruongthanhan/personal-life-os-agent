@@ -93,23 +93,28 @@ def get_upcoming_events():
     result_lines = []
     
     for event in all_events:
+        # Lấy thời gian
         start_raw = event['start'].get('dateTime', event['start'].get('date')).replace('Z', '+00:00')
         end_raw = event['end'].get('dateTime', event['end'].get('date')).replace('Z', '+00:00')
-        
         start_dt = datetime.fromisoformat(start_raw)
         end_dt = datetime.fromisoformat(end_raw)
         
-        start_str = start_dt.strftime('%H:%M')
-        end_str = end_dt.strftime('%H:%M')
+        time_str = f"⏰ **{start_dt.strftime('%H:%M')} - {end_dt.strftime('%H:%M')}**"
         
-        if end_dt.date() > start_dt.date():
-            end_str += " +1 day"
-            
+        # Lấy thông tin bổ sung
         summary = event.get('summary', '(Không có tiêu đề)')
-        
-        # (Tùy chọn) Hiển thị thêm tên Calendar nếu bạn muốn biết sự kiện thuộc lịch nào
-        result_lines.append(f"⏰ {start_str} - {end_str} | 📌 {summary}")
+        location = event.get('location', 'Không có địa điểm')
+        description = event.get('description', 'Không có mô tả')
+
+        # Format block cho 1 sự kiện
+        event_block = (
+            f"{time_str} | 📌 **{summary}**\n"
+            f"   📍 *Địa điểm:* {location}\n"
+            f"   📝 *Mô tả:* {description}\n"
+            f"━━━━━━━━━━━━━━━━━━━━"
+        )
+        result_lines.append(event_block)
 
     return result + "\n".join(result_lines)
 
-# print(get_upcoming_events())
+print(get_upcoming_events())
