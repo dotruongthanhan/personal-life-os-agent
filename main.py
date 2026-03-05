@@ -62,7 +62,7 @@ run_time = datetime.time(hour=8, minute=0, second=0, tzinfo=vn_timezone)
 async def execute_briefing_logic(destination):
     """Lấy dữ liệu và gửi tin nhắn tới đích đến được chỉ định"""
     calendar_data = get_upcoming_events()
-    message = f"🌅 **[Life-OS Daily Briefing]**\n\n📅 **LỊCH TRÌNH 24 GIỜ TỚI:**\n{calendar_data}"
+    message = f"🌅 **[Life-OS Daily Briefing]**\n\n📅 **LỊCH TRÌNH NGÀY HÔM NAY:**\n{calendar_data}"
     await destination.send(message)
 
 @tasks.loop(time=run_time) # Hẹn giờ gửi message lúc 8h sáng

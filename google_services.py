@@ -61,7 +61,7 @@ def get_upcoming_events():
 
     # Lấy thời gian hiện tại theo định dạng chuẩn ISO (UTC)
     now = datetime.now(timezone.utc).isoformat()
-    tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    end_of_today = (datetime.now(timezone.utc).replace(hour=23, minute=59, second=59)).isoformat()
     
     calendar_ids = get_calendar_ids_from_env()
     all_events = []
@@ -71,7 +71,7 @@ def get_upcoming_events():
             events_result = service.events().list(
                 calendarId=cal_id, 
                 timeMin=now,
-                timeMax=tomorrow,
+                timeMax=end_of_today,
                 singleEvents=True,
                 orderBy='startTime'
             ).execute()
@@ -82,7 +82,7 @@ def get_upcoming_events():
             print(f"⚠️ Lỗi khi đọc calendar {cal_id}: {e}")
 
     if not all_events:
-        return '📭 Không tìm thấy sự kiện nào trong 24 giờ tới.'
+        return '📭 Không tìm thấy sự kiện nào trong ngày hôm nay.'
 
     # 2. Sắp xếp tất cả sự kiện theo thời gian bắt đầu (startTime)
     # Chúng ta dùng get('dateTime') cho sự kiện có giờ, và get('date') cho sự kiện cả ngày
