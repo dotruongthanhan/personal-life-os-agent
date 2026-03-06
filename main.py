@@ -47,6 +47,8 @@ for part in user_ids_raw.split(','):
 if not USER_IDS:
     raise ValueError("Lỗi: Không tìm thấy USER_ID hợp lệ trong DISCORD_USER_ID(S)")
 
+first_run = True  # Biến để kiểm tra lần chạy đầu tiên
+
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
@@ -86,28 +88,32 @@ async def daily_briefing():
 @client.event
 async def on_ready():
     print(f"System: {client.user} online.")
-    if not daily_briefing.is_running():
-        daily_briefing.start()
-        print(f"System: Cronjob lúc {run_time.strftime('%H:%M:%S')} (UTC+7) mỗi ngày.")
+    if first_run:
+        if not daily_briefing.is_running():
+            daily_briefing.start()
+            print(f"System: Cronjob lúc {run_time.strftime('%H:%M:%S')} (UTC+7) mỗi ngày.")
 
-    try:
-        for uid in USER_IDS:
-            try:
-                user = await client.fetch_user(uid)
-                if user:
-                    instructions = (
-                        "🟢 **[SYSTEM ONLINE] Life-OS Agent đã khởi động thành công!**\n"
-                        f"⏰ Thông báo hàng ngày sẽ được gửi lúc {run_time.strftime('%H:%M:%S')} sáng (UTC+7)\n\n"
-                        "🛠️ **DANH SÁCH LỆNH ĐIỀU KHIỂN:**\n"
-                        "▸ `!ping` : Kiểm tra kết nối và độ trễ của Bot.\n"
-                        "▸ `!weather [city]` : Lấy thông tin thời tiết cho thành phố cụ thể (Mặc định: Hà Nội).\n"
-                        "▸ `!briefing` : Trích xuất và gửi ngay báo cáo lịch trình 24h tới.\n"
-                    )
-                    await user.send(instructions)
-            except Exception as e:
-                print(f"Lỗi khi gửi tin nhắn hướng dẫn cho {uid}: {e}")
-    except Exception as e:
-        print(f"Lỗi khi gửi tin nhắn hướng dẫn: {e}")
+        try:
+            for uid in USER_IDS:
+                try:
+                    user = await client.fetch_user(uid)
+                    if user:
+                        instructions = (
+                            "🟢 **[SYSTEM ONLINE] Life-OS Agent đã khởi động thành công!**\n"
+                            f"⏰ Thông báo hàng ngày sẽ được gửi lúc {run_time.strftime('%H:%M:%S')} sáng (UTC+7)\n\n"
+                            "🛠️ **DANH SÁCH LỆNH ĐIỀU KHIỂN:**\n"
+                            "▸ `!ping` : Kiểm tra kết nối và độ trễ của Bot.\n"
+                            "▸ `!weather [city]` : Lấy thông tin thời tiết cho thành phố cụ thể (Mặc định: Hà Nội).\n"
+                            "▸ `!briefing` : Trích xuất và gửi ngay báo cáo lịch trình 24h tới.\n"
+                        )
+                        await user.send(instructions)
+                except Exception as e:
+                    print(f"Lỗi khi gửi tin nhắn hướng dẫn cho {uid}: {e}")
+        except Exception as e:
+            print(f"Lỗi khi gửi tin nhắn hướng dẫn: {e}")
+        first_run = False       # Đánh dấu đã chạy lần đầu để tránh khởi động lại cronjob nhiều lần
+    else:
+        await user.send("🔄 Hệ thống vừa phục hồi sau sự cố kết nối (Reconnected).")
 
 @client.event
 async def on_message(message):
