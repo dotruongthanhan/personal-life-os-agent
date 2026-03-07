@@ -87,6 +87,7 @@ async def daily_briefing():
 # ---------------------------------------------------------
 @client.event
 async def on_ready():
+    global first_run
     print(f"System: {client.user} online.")
     if first_run:
         if not daily_briefing.is_running():
