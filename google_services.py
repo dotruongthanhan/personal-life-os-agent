@@ -5,6 +5,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
+import zoneinfo
 
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
 load_dotenv()
@@ -55,43 +56,75 @@ def get_calendars():
     for cal in calendars:
         print(f"- {cal['summary']} (ID: {cal['id']})")
 
-def get_upcoming_events():
-    """Lấy danh sách sự kiện sắp tới"""
+def get_raw_events_today():
+    """Hàm lõi để lấy danh sách sự kiện thô từ Google"""
     service = get_calendar_service()
-
-    # Lấy calendar --> Lấy múi giờ
     calendar_ids = get_calendar_ids_from_env()
+    
+    # Lấy múi giờ linh hoạt
     try:
         primary_cal = service.calendars().get(calendarId=calendar_ids[0]).execute()
-        tz_name = primary_cal.get('timeZone', 'UTC')
-    except Exception as e:
-        print(f"⚠️ Lỗi khi lấy thông tin calendar: {e}")
-        tz_name = 'UTC'
-
-    import zoneinfo
+        tz_name = primary_cal.get('timeZone', 'Asia/Ho_Chi_Minh')
+    except:
+        tz_name = 'Asia/Ho_Chi_Minh'
+    
     user_tz = zoneinfo.ZoneInfo(tz_name)
-    
-    # Lấy thời gian hiện tại theo định dạng chuẩn ISO (múi giờ của user)
-    now = datetime.now(user_tz).isoformat()
-    end_of_today = (datetime.now(user_tz).replace(hour=23, minute=59, second=59)).isoformat()
-    
-    all_events = []
-    # 1. Lặp qua từng calendar để lấy sự kiện
+    now = datetime.now(user_tz)
+    end_of_day = now.replace(hour=23, minute=59, second=59, microsecond=0)
+
+    all_items = []
     for cal_id in calendar_ids:
         try:
-            events_result = service.events().list(
-                calendarId=cal_id, 
-                timeMin=now,
-                timeMax=end_of_today,
+            result = service.events().list(
+                calendarId=cal_id,
+                timeMin=now.isoformat(),
+                timeMax=end_of_day.isoformat(),
                 singleEvents=True,
                 orderBy='startTime'
             ).execute()
-            
-            events = events_result.get('items', [])
-            all_events.extend(events) # Thêm vào danh sách tổng
+            all_items.extend(result.get('items', []))
         except Exception as e:
-            print(f"⚠️ Lỗi khi đọc calendar {cal_id}: {e}")
+            print(f"⚠️ Lỗi đọc {cal_id}: {e}")
+            
+    return all_items, user_tz, now
 
+def get_upcoming_events():
+    """Lấy danh sách sự kiện sắp tới"""
+    # service = get_calendar_service()
+
+    # # Lấy calendar --> Lấy múi giờ
+    # calendar_ids = get_calendar_ids_from_env()
+    # try:
+    #     primary_cal = service.calendars().get(calendarId=calendar_ids[0]).execute()
+    #     tz_name = primary_cal.get('timeZone', 'UTC')
+    # except Exception as e:
+    #     print(f"⚠️ Lỗi khi lấy thông tin calendar: {e}")
+    #     tz_name = 'UTC'
+
+    # user_tz = zoneinfo.ZoneInfo(tz_name)
+    
+    # # Lấy thời gian hiện tại theo định dạng chuẩn ISO (múi giờ của user)
+    # now = datetime.now(user_tz).isoformat()
+    # end_of_today = (datetime.now(user_tz).replace(hour=23, minute=59, second=59)).isoformat()
+    
+    # all_events = []
+    # # 1. Lặp qua từng calendar để lấy sự kiện
+    # for cal_id in calendar_ids:
+    #     try:
+    #         events_result = service.events().list(
+    #             calendarId=cal_id, 
+    #             timeMin=now,
+    #             timeMax=end_of_today,
+    #             singleEvents=True,
+    #             orderBy='startTime'
+    #         ).execute()
+            
+    #         events = events_result.get('items', [])
+    #         all_events.extend(events) # Thêm vào danh sách tổng
+    #     except Exception as e:
+    #         print(f"⚠️ Lỗi khi đọc calendar {cal_id}: {e}")
+
+    all_events, user_tz, _ = get_raw_events_today()
     if not all_events:
         return '📭 Không tìm thấy sự kiện nào trong ngày hôm nay.'
 
@@ -128,4 +161,46 @@ def get_upcoming_events():
 
     return result + "\n".join(result_lines)
 
+def fetch_calendar_reminders(default_minutes: int = 30):
+    """
+    Lấy danh sách các mốc thông báo từ Google Calendar.
+    Mặc định nhắc trước 30 phút nếu event không có reminder.
+    """
+    events, user_tz, now = get_raw_events_today()
+    new_notifications = {}
+
+    for event in events:
+        start_raw = event['start'].get('dateTime', event['start'].get('date'))
+        start_dt = datetime.fromisoformat(start_raw.replace('Z', '+00:00')).astimezone(user_tz)
+
+        # Lấy cấu hình reminders từ Google
+        reminders = event.get('reminders', {})
+        if reminders.get('useDefault'):
+            # Nếu dùng mặc định của Google Calendar (thường là 10-30p) 
+            # hoặc bạn có thể ép về default_minutes của bạn ở đây
+            minutes_list = [default_minutes]
+        else:
+            overrides = reminders.get('overrides', [])
+            # Nếu có cài đặt riêng thì lấy, không thì dùng default_minutes
+            minutes_list = [ov.get('minutes') for ov in overrides] if overrides else [default_minutes]
+
+        for m in minutes_list:
+            notify_dt = start_dt - timedelta(minutes=int(m))
+            # Chỉ lấy các mốc ở tương lai
+            if notify_dt > now:
+                notify_iso = notify_dt.isoformat()
+                event_info = {
+                    'summary': event.get('summary', '(Không tiêu đề)'),
+                    'start': start_dt.strftime('%H:%M'),
+                    'location': event.get('location', 'Không có địa điểm'),
+                    'reminder_minutes': m
+                }
+                new_notifications.setdefault(notify_iso, []).append(event_info)
+
+    return new_notifications
+
+# print("🔄 Đang lấy lịch trình sắp tới...")
 # print(get_upcoming_events())
+
+# print("\n🔄 Đang lấy mốc nhắc nhở từ Google Calendar...")
+# print(fetch_calendar_reminders())
