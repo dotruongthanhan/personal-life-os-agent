@@ -82,6 +82,15 @@ async def daily_briefing():
     except Exception as e:
         print(f"Lỗi Cronjob: {e}")
 
+def instructions():
+    return (
+        "🛠️ **DANH SÁCH LỆNH ĐIỀU KHIỂN:**\n"
+        "▸ `!help` : Hiển thị danh sách lệnh.\n"
+        "▸ `!ping` : Kiểm tra kết nối và độ trễ của Bot.\n"
+        "▸ `!weather [city]` : Lấy thông tin thời tiết cho thành phố cụ thể (Mặc định: Hà Nội).\n"
+        "▸ `!briefing` : Trích xuất và gửi ngay báo cáo lịch trình trong ngày hôm nay.\n"
+    )
+
 # ---------------------------------------------------------
 # SỰ KIỆN HỆ THỐNG
 # ---------------------------------------------------------
@@ -99,15 +108,12 @@ async def on_ready():
                 try:
                     user = await client.fetch_user(uid)
                     if user:
-                        instructions = (
-                            "🟢 **[SYSTEM ONLINE] Life-OS Agent đã khởi động thành công!**\n"
+                        welcome_message = (
+                            "🟢 **[SYSTEM ONLINE] Life-OS Agent đã khởi động thành công!**\n" # Bỏ dấu phẩy ở đây
                             f"⏰ Thông báo hàng ngày sẽ được gửi lúc {run_time.strftime('%H:%M:%S')} sáng (UTC+7)\n\n"
-                            "🛠️ **DANH SÁCH LỆNH ĐIỀU KHIỂN:**\n"
-                            "▸ `!ping` : Kiểm tra kết nối và độ trễ của Bot.\n"
-                            "▸ `!weather [city]` : Lấy thông tin thời tiết cho thành phố cụ thể (Mặc định: Hà Nội).\n"
-                            "▸ `!briefing` : Trích xuất và gửi ngay báo cáo lịch trình 24h tới.\n"
                         )
-                        await user.send(instructions)
+                        await user.send(welcome_message)
+                        await user.send(instructions())
                 except Exception as e:
                     print(f"Lỗi khi gửi tin nhắn hướng dẫn cho {uid}: {e}")
         except Exception as e:
@@ -125,6 +131,10 @@ async def on_message(message):
     # Command: !ping
     if message.content == '!ping':
         await message.channel.send("Pong! (DM Mode)")
+
+    # Command: !help
+    if message.content == '!help':
+        await message.channel.send(instructions())
 
     # Command: !weather [city]
     if message.content.startswith('!weather'):
