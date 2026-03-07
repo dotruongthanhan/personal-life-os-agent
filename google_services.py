@@ -59,11 +59,22 @@ def get_upcoming_events():
     """Lấy danh sách sự kiện sắp tới"""
     service = get_calendar_service()
 
-    # Lấy thời gian hiện tại theo định dạng chuẩn ISO (UTC)
-    now = datetime.now(timezone.utc).isoformat()
-    end_of_today = (datetime.now(timezone.utc).replace(hour=23, minute=59, second=59)).isoformat()
-    
+    # Lấy calendar --> Lấy múi giờ
     calendar_ids = get_calendar_ids_from_env()
+    try:
+        primary_cal = service.calendars().get(calendarId=calendar_ids[0]).execute()
+        tz_name = primary_cal.get('timeZone', 'UTC')
+    except Exception as e:
+        print(f"⚠️ Lỗi khi lấy thông tin calendar: {e}")
+        tz_name = 'UTC'
+
+    import zoneinfo
+    user_tz = zoneinfo.ZoneInfo(tz_name)
+    
+    # Lấy thời gian hiện tại theo định dạng chuẩn ISO (múi giờ của user)
+    now = datetime.now(user_tz).isoformat()
+    end_of_today = (datetime.now(user_tz).replace(hour=23, minute=59, second=59)).isoformat()
+    
     all_events = []
     # 1. Lặp qua từng calendar để lấy sự kiện
     for cal_id in calendar_ids:
