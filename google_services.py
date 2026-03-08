@@ -90,41 +90,8 @@ def get_raw_events_today():
 
 def get_upcoming_events():
     """Lấy danh sách sự kiện sắp tới"""
-    # service = get_calendar_service()
 
-    # # Lấy calendar --> Lấy múi giờ
-    # calendar_ids = get_calendar_ids_from_env()
-    # try:
-    #     primary_cal = service.calendars().get(calendarId=calendar_ids[0]).execute()
-    #     tz_name = primary_cal.get('timeZone', 'UTC')
-    # except Exception as e:
-    #     print(f"⚠️ Lỗi khi lấy thông tin calendar: {e}")
-    #     tz_name = 'UTC'
-
-    # user_tz = zoneinfo.ZoneInfo(tz_name)
-    
-    # # Lấy thời gian hiện tại theo định dạng chuẩn ISO (múi giờ của user)
-    # now = datetime.now(user_tz).isoformat()
-    # end_of_today = (datetime.now(user_tz).replace(hour=23, minute=59, second=59)).isoformat()
-    
-    # all_events = []
-    # # 1. Lặp qua từng calendar để lấy sự kiện
-    # for cal_id in calendar_ids:
-    #     try:
-    #         events_result = service.events().list(
-    #             calendarId=cal_id, 
-    #             timeMin=now,
-    #             timeMax=end_of_today,
-    #             singleEvents=True,
-    #             orderBy='startTime'
-    #         ).execute()
-            
-    #         events = events_result.get('items', [])
-    #         all_events.extend(events) # Thêm vào danh sách tổng
-    #     except Exception as e:
-    #         print(f"⚠️ Lỗi khi đọc calendar {cal_id}: {e}")
-
-    all_events, user_tz, _ = get_raw_events_today()
+    all_events, _, __ = get_raw_events_today()
     if not all_events:
         return '📭 Không tìm thấy sự kiện nào trong ngày hôm nay.'
 
@@ -147,16 +114,22 @@ def get_upcoming_events():
         
         # Lấy thông tin bổ sung
         summary = event.get('summary', '(Không có tiêu đề)')
-        location = event.get('location', 'Không có địa điểm')
-        description = event.get('description', 'Không có mô tả')
+        location = event.get('location')
+        description = event.get('description')
 
         # Format block cho 1 sự kiện
-        event_block = (
-            f"{time_str} | 📌 **{summary}**\n"
-            f"   📍 *Địa điểm:* {location}\n"
-            f"   📝 *Mô tả:* {description}\n"
-            f"━━━━━━━━━━━━━━━━━━━━"
-        )
+        # event_block = (
+        #     f"{time_str} | 📌 **{summary}**\n"
+        #     f"   📍 *Địa điểm:* {location}\n"
+        #     f"   📝 *Mô tả:* {description}\n"
+        #     f"━━━━━━━━━━━━━━━━━━━━"
+        # )
+        event_block = f"{time_str} | 📌 **{summary}**\n"
+        if location:
+            event_block += f"   📍 *Địa điểm:* {location}\n"
+        if description:
+            event_block += f"   📝 *Mô tả:* {description}\n"
+        event_block += f"━━━━━━━━━━━━━━━━━━━━"
         result_lines.append(event_block)
 
     return result + "\n".join(result_lines)
@@ -192,7 +165,8 @@ def fetch_calendar_reminders(default_minutes: int = 30):
                 event_info = {
                     'summary': event.get('summary', '(Không tiêu đề)'),
                     'start': start_dt.strftime('%H:%M'),
-                    'location': event.get('location', 'Không có địa điểm'),
+                    'location': event.get('location'),
+                    'description': event.get('description'),
                     'reminder_minutes': m
                 }
                 new_notifications.setdefault(notify_iso, []).append(event_info)
