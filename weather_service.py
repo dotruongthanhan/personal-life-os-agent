@@ -78,7 +78,7 @@ def get_weather_forecast_string(city = None):
             max_t = max(temps)
             advice = "☔ **Lưu ý: Có khả năng mưa, nhớ mang theo ô/áo mưa nhé!**" if will_rain else "😎 Thời tiết khô ráo, một ngày tuyệt vời!"
             
-            result = f"🌤️ **Dự báo thời tiết {actual_city_name} hôm nay:**\n"
+            result = f"\n🌤️ **Dự báo thời tiết {actual_city_name} hôm nay:**\n"
             result += f"🌡️ Nhiệt độ trong ngày: **{min_t}°C - {max_t}°C**\n"
             result += "\n".join(forecast_lines)
             result += f"\n💡 {advice}"
@@ -90,6 +90,6 @@ def get_weather_forecast_string(city = None):
     except Exception as e:
         return f"⚠️ Lỗi hệ thống thời tiết: {e}"
 
-if __name__ == '__main__':
-    print("🔄 Đang lấy dự báo thời tiết...")
-    print(get_weather_forecast_string("Sydney"))
+# if __name__ == '__main__':
+#     print("🔄 Đang lấy dự báo thời tiết...")
+#     print(get_weather_forecast_string("Sydney"))
