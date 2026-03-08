@@ -3,12 +3,10 @@ import os
 import datetime
 from dotenv import load_dotenv
 from discord.ext import tasks
+import asyncio
 
 from weather_service import get_weather_forecast_string
 from google_services import get_upcoming_events, fetch_calendar_reminders
-
-import os
-import json
 
 from keep_alive import keep_alive
 
@@ -74,18 +72,16 @@ async def execute_briefing_logic(destination):
 
 @tasks.loop(time=run_time) # Hẹn giờ gửi message lúc 8h sáng
 async def daily_briefing():
-    try:
-        for uid in USER_IDS:
-            try:
-                user = await client.fetch_user(uid)
-                if user:
-                    await user.send("**🔔 Chào buổi sáng! Đây là báo cáo lịch trình hàng ngày của bạn.**")
-                    await execute_briefing_logic(user)
-                    print(f"System: Đã gửi báo cáo định kỳ 8:00 AM cho {user.name} ({uid}).")
-            except Exception as e:
-                print(f"Lỗi khi gửi báo cáo cho {uid}: {e}")
-    except Exception as e:
-        print(f"Lỗi Cronjob: {e}")
+    for uid in USER_IDS:
+        try:
+            user = await client.fetch_user(uid)
+            if user:
+                await user.send("**🔔 Chào buổi sáng! Đây là báo cáo lịch trình và thời tiết hàng ngày của bạn.**")
+                await execute_briefing_logic(user)
+                await send_weather_summary(user)
+                print(f"System: Đã gửi báo cáo định kỳ lịch trình và thời tiết 8:00 AM cho {user.name} ({uid}).")
+        except Exception as e:
+            print(f"Lỗi khi gửi báo cáo cho {uid}: {e}")
 
 def instructions():
     return (
@@ -104,6 +100,14 @@ def instructions():
 @client.event
 async def on_ready():
     global first_run
+    # Đợi cho đến khi bước sang phút tiếp theo
+    now = datetime.datetime.now()
+    seconds_until_next_minute = 60 - now.second
+    
+    if seconds_until_next_minute > 0:
+        print(f"System: Đang đợi {seconds_until_next_minute} giây để đồng bộ vòng lặp...")
+        await asyncio.sleep(seconds_until_next_minute)
+    
     print(f"System: {client.user} online.")
     if first_run:
         if not daily_briefing.is_running():
@@ -125,7 +129,7 @@ async def on_ready():
                     if user:
                         welcome_message = (
                             "🟢 **[SYSTEM ONLINE] Life-OS Agent đã khởi động thành công!**\n" # Bỏ dấu phẩy ở đây
-                            f"⏰ Thông báo hàng ngày sẽ được gửi lúc {run_time.strftime('%H:%M:%S')} sáng (UTC+7)\n\n"
+                            f"⏰ Thông báo hàng ngày sẽ được gửi lúc {run_time.strftime('%H:%M')} sáng (UTC+7)\n\n"
                         )
                         await user.send(welcome_message)
                         await user.send(instructions())
@@ -234,8 +238,7 @@ async def check_notifications():
     global notifications_data
     
     # 1. Lấy thời gian hiện tại theo phút (bỏ giây và micro giây để so sánh khớp tuyệt đối)
-    now = datetime.datetime.now(vn_timezone).replace(second=0, microsecond=0)
-    # now_iso = now.isoformat()
+    now = datetime.datetime.now(vn_timezone)
     
     # Danh sách các mốc thời gian cần xóa sau khi xử lý
     to_remove = []
@@ -287,8 +290,10 @@ def format_notification_content(events):
     for ev in events:
         msg += f"📌 **{ev['summary']}**\n"
         msg += f"⏰ Bắt đầu lúc: `{ev['start']}`\n"
-        if ev.get('location') and ev['location'] != 'Không có địa điểm':
+        if ev.get('location'):# and ev['location'] != 'Không có địa điểm':
             msg += f"📍 Địa điểm: {ev['location']}\n"
+        if ev.get('description'):# and ev['description'] != 'Không có mô tả':
+            msg += f"� Mô tả: {ev['description']}\n"
         msg += f"⏱️ Nhắc trước: {ev['reminder_minutes']} phút\n"
         msg += "────────────────────\n"
     return msg
