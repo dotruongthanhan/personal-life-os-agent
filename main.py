@@ -58,7 +58,7 @@ client = discord.Client(intents=intents)
 
 # Cấu hình múi giờ (UTC+7)
 vn_timezone = datetime.timezone(datetime.timedelta(hours=7))
-run_time = datetime.time(hour=8, minute=0, second=0, tzinfo=vn_timezone)
+run_time = datetime.time(hour=7, minute=30, second=0, tzinfo=vn_timezone)
 
 # ---------------------------------------------------------
 # ĐỊNH NGHĨA TÁC VỤ NỀN (CRONJOB) -> GỬI DM
@@ -70,7 +70,7 @@ async def execute_briefing_logic(destination):
     message = f"🌅 **[Life-OS Daily Briefing]**\n\n📅 **LỊCH TRÌNH NGÀY HÔM NAY:**\n{calendar_data}"
     await destination.send(message)
 
-@tasks.loop(time=run_time) # Hẹn giờ gửi message lúc 8h sáng
+@tasks.loop(time=run_time) # Hẹn giờ gửi message theo run_time
 async def daily_briefing():
     for uid in USER_IDS:
         try:
@@ -79,7 +79,7 @@ async def daily_briefing():
                 await user.send("**🔔 Chào buổi sáng! Đây là báo cáo lịch trình và thời tiết hàng ngày của bạn.**")
                 await execute_briefing_logic(user)
                 await send_weather_summary(user)
-                print(f"System: Đã gửi báo cáo định kỳ lịch trình và thời tiết 8:00 AM cho {user.name} ({uid}).")
+                print(f"System: Đã gửi báo cáo định kỳ lịch trình và thời tiết {run_time.strftime('%H:%M')} AM cho {user.name} ({uid}).")
         except Exception as e:
             print(f"Lỗi khi gửi báo cáo cho {uid}: {e}")
 
@@ -293,7 +293,7 @@ def format_notification_content(events):
         if ev.get('location'):# and ev['location'] != 'Không có địa điểm':
             msg += f"📍 Địa điểm: {ev['location']}\n"
         if ev.get('description'):# and ev['description'] != 'Không có mô tả':
-            msg += f"� Mô tả: {ev['description']}\n"
+            msg += f"📝 Mô tả: {ev['description']}\n"
         msg += f"⏱️ Nhắc trước: {ev['reminder_minutes']} phút\n"
         msg += "────────────────────\n"
     return msg
