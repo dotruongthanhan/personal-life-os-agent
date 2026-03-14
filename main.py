@@ -1,13 +1,19 @@
+# Import thư viện tải về
 import discord
 import os
 import datetime
 from dotenv import load_dotenv
 from discord.ext import tasks
 import asyncio
+import json
+from google import genai
 
+# Import các module chức năng
 from weather_service import get_weather_forecast_string
 from google_services import get_upcoming_events, fetch_calendar_reminders
+from tools_config import tools, available_functions
 
+# Giữ cho bot luôn chạy
 from keep_alive import keep_alive
 
 # Nếu không tìm thấy file credentials.json (tức là đang chạy trên Cloud)
@@ -25,6 +31,10 @@ if not os.path.exists('token.json'):
 # Nạp biến môi trường
 load_dotenv()
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
+
+# Khởi tạo Gemini Client
+client_gemini = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+MODEL_ID = "gemini-3.1-flash-lite-preview"
 
 # Global variable
 DEFAULT_REMINDER_MINUTES = 30 # Mặc định reminder trước 30 phút
@@ -54,11 +64,11 @@ first_run = True  # Biến để kiểm tra lần chạy đầu tiên
 
 intents = discord.Intents.default()
 intents.message_content = True
-client = discord.Client(intents=intents)
+client_discord = discord.Client(intents=intents)
 
 # Cấu hình múi giờ (UTC+7)
 vn_timezone = datetime.timezone(datetime.timedelta(hours=7))
-run_time = datetime.time(hour=7, minute=30, second=0, tzinfo=vn_timezone)
+run_time = datetime.time(hour=7, minute=0, second=0, tzinfo=vn_timezone)
 
 # ---------------------------------------------------------
 # ĐỊNH NGHĨA TÁC VỤ NỀN (CRONJOB) -> GỬI DM
@@ -74,7 +84,7 @@ async def execute_briefing_logic(destination):
 async def daily_briefing():
     for uid in USER_IDS:
         try:
-            user = await client.fetch_user(uid)
+            user = await client_discord.fetch_user(uid)
             if user:
                 await user.send("**🔔 Chào buổi sáng! Đây là báo cáo lịch trình và thời tiết hàng ngày của bạn.**")
                 await execute_briefing_logic(user)
@@ -82,6 +92,51 @@ async def daily_briefing():
                 print(f"System: Đã gửi báo cáo định kỳ lịch trình và thời tiết {run_time.strftime('%H:%M')} AM cho {user.name} ({uid}).")
         except Exception as e:
             print(f"Lỗi khi gửi báo cáo cho {uid}: {e}")
+
+async def function_call_execution(message: discord.Message, prompt: str = None):
+    try:
+        # Lượt 1: Gửi tin nhắn của user để AI nhận diện function call
+        interaction = client_gemini.interactions.create(
+            model=MODEL_ID,
+            input= prompt or message.content,
+            tools=tools # tools đã định nghĩa ở tools_config
+        )
+
+        # Kiểm tra xem AI có yêu cầu gọi hàm không
+        for output in interaction.outputs:
+            if output.type == "function_call":
+                fn_name = output.name
+                fn_args = output.arguments
+                
+                print(f"System: AI yêu cầu gọi function {fn_name} với argument {fn_args}")
+
+                # Thực thi function nếu có trong available_functions
+                function_to_call = available_functions.get(fn_name)
+                if function_to_call:
+                    result = function_to_call(**fn_args)
+
+                    # Lượt 2: Gửi kết quả function trong program lại cho AI
+                    interaction = client_gemini.interactions.create(
+                        model=MODEL_ID,
+                        previous_interaction_id=interaction.id,
+                        input=[
+                            {
+                                "type": "function_result",
+                                "name": output.name,
+                                "call_id": output.id,
+                                "result": json.dumps(result)
+                            }
+                        ]
+                    )
+                    # Lượt 3: AI trả response cuối
+                    if interaction.outputs:
+                        await message.channel.send(interaction.outputs[-1].text)
+                else:
+                    await message.channel.send(f"⚠️ Hàm {fn_name} không được hỗ trợ. Liên lạc admin để cập nhật thêm.")
+            elif hasattr(output, 'text') and output.text:
+                await message.channel.send(output.text)
+    except Exception as e:
+        await message.channel.send(f"⚠️ Lỗi khi xử lý yêu cầu: {e}")
 
 def instructions():
     return (
@@ -97,18 +152,18 @@ def instructions():
 # ---------------------------------------------------------
 # SỰ KIỆN HỆ THỐNG
 # ---------------------------------------------------------
-@client.event
+@client_discord.event
 async def on_ready():
     global first_run
     # Đợi cho đến khi bước sang phút tiếp theo
     now = datetime.datetime.now()
-    seconds_until_next_minute = 60 - now.second
+    # seconds_until_next_minute = 60 - now.second
     
-    if seconds_until_next_minute > 0:
-        print(f"System: Đang đợi {seconds_until_next_minute} giây để đồng bộ vòng lặp...")
-        await asyncio.sleep(seconds_until_next_minute)
+    # if seconds_until_next_minute > 0:
+    #     print(f"System: Đang đợi {seconds_until_next_minute} giây để đồng bộ vòng lặp...")
+    #     await asyncio.sleep(seconds_until_next_minute)
     
-    print(f"System: {client.user} online.")
+    print(f"System: {client_discord.user} online.")
     if first_run:
         if not daily_briefing.is_running():
             daily_briefing.start()
@@ -120,12 +175,12 @@ async def on_ready():
 
         if not check_notifications.is_running():
             check_notifications.start()
-            print(f"System: {client.user} đã sẵn sàng quét thông báo.")
+            print(f"System: {client_discord.user} đã sẵn sàng quét thông báo.")
 
         try:
             for uid in USER_IDS:
                 try:
-                    user = await client.fetch_user(uid)
+                    user = await client_discord.fetch_user(uid)
                     if user:
                         welcome_message = (
                             "🟢 **[SYSTEM ONLINE] Life-OS Agent đã khởi động thành công!**\n" # Bỏ dấu phẩy ở đây
@@ -139,7 +194,7 @@ async def on_ready():
             print(f"Lỗi khi gửi tin nhắn hướng dẫn: {e}")
         
         try:
-            loop = client.loop
+            loop = client_discord.loop
             # Chạy hàm fetch trong thread riêng
             initial_data = await loop.run_in_executor(None, fetch_calendar_reminders, 30)
             
@@ -151,7 +206,7 @@ async def on_ready():
             
             # Gửi thông báo xác nhận cho bạn qua Discord
             for uid in USER_IDS:
-                user = client.get_user(uid) or await client.fetch_user(uid)
+                user = client_discord.get_user(uid) or await client_discord.fetch_user(uid)
                 if user:
                     await user.send(f"✅ **Đã quét lịch trình thành công!** Có `{count}` mốc thông báo sẽ được gửi trong hôm nay.")
         except Exception as e:
@@ -160,73 +215,82 @@ async def on_ready():
     else:
         await user.send("🔄 Hệ thống vừa phục hồi sau sự cố kết nối (Reconnected).")
 
-@client.event
+@client_discord.event
 async def on_message(message):
     # Ignore messages sent by the bot itself
-    if message.author == client.user:
+    if message.author == client_discord.user:
         return
+    
+    if message.content.startswith('!'):
+        # Command: !ping
+        if message.content == '!ping':
+            await message.channel.send("Pong!")
 
-    # Command: !ping
-    if message.content == '!ping':
-        await message.channel.send("Pong!")
+        # Command: !help
+        if message.content == '!help':
+            await message.channel.send(instructions())
 
-    # Command: !help
-    if message.content == '!help':
-        await message.channel.send(instructions())
+        # Command: !weather [city]
+        if message.content.startswith('!weather'):
+            # Split and allow optional city argument
+            parts = message.content.split(maxsplit=1)
+            prompt = "Đưa ra lời khuyên cho người dùng về trang phục và vật dụng nên mang dựa theo dữ liệu thời tiết Hà Nội. Giới hạn câu trả lời trong tối đa 20 từ."
+            if len(parts) > 1:
+                prompt = prompt.replace("Hà Nội", parts[1]) # Thay thế thành phố trong prompt nếu có
+                await send_weather_summary(message.channel, city=parts[1]) # Gửi thành phố cụ thể
+            else:
+                await send_weather_summary(message.channel) # Gửi mặc định Hà Nội
 
-    # Command: !weather [city]
-    if message.content.startswith('!weather'):
-        # Split and allow optional city argument
-        parts = message.content.split(maxsplit=1)
-        if len(parts) > 1:
-            await send_weather_summary(message.channel, parts[1].strip())
-        else:
-            # Let the helper's default city value apply
-            await send_weather_summary(message.channel)
+            await function_call_execution(message, prompt=prompt)           # Chạy function call
 
-    # Command: !briefing
-    if message.content == '!briefing':
-        await message.channel.send("🔄 Đang trích xuất dữ liệu Google Calendar...")
-        try:
-            # Gọi hàm logic, truyền đích đến là Channel (nơi user gõ lệnh)
-            await execute_briefing_logic(message.channel)
-        except Exception as e:
-            await message.channel.send(f"❌ Lỗi khi lấy dữ liệu: {e}")
+        # Command: !briefing
+        if message.content == '!briefing':
+            await message.channel.send("🔄 Đang trích xuất dữ liệu Google Calendar...")
+            try:
+                # Gọi hàm logic, truyền đích đến là Channel (nơi user gõ lệnh)
+                await execute_briefing_logic(message.channel)
+            except Exception as e:                await message.channel.send(f"❌ Lỗi khi lấy dữ liệu: {e}")
 
-    # Command: !sync
-    if message.content == '!sync':
-        await message.channel.send("🔍 Đang quét lịch trình mới nhất...")
-        global notifications_data
-        
-        loop = client.loop
-        notifications_data = await loop.run_in_executor(None, fetch_calendar_reminders, 30)
-        
-        count = len(notifications_data)
-        await message.channel.send(f"✅ Đồng bộ thành công! Có {count} thông báo sẽ được gửi trong hôm nay.")
-
-    # Command: !list
-    if message.content == '!list':
-        if not notifications_data:
-            await message.channel.send("📭 Hiện không có thông báo nào đang chờ.")
-            return
+        # Command: !sync
+        if message.content == '!sync':
+            await message.channel.send("🔍 Đang quét lịch trình mới nhất...")
+            global notifications_data
             
-        lines = ["📋 **Danh sách các mốc nhắc nhở đang chờ:**"]
-        # Sắp xếp các mốc giờ cho dễ nhìn
-        for iso_time in sorted(notifications_data.keys()):
-            events = notifications_data[iso_time]
-            # Lấy giờ từ chuỗi ISO để hiển thị gọn
-            display_time = iso_time.split('T')[1][:5] 
-            summaries = ", ".join([e['summary'] for e in events])
-            lines.append(f"• `{display_time}`: {summaries}")
+            loop = client_discord.loop
+            notifications_data = await loop.run_in_executor(None, fetch_calendar_reminders, 30)
             
-        await message.channel.send("\n".join(lines))
+            count = len(notifications_data)
+            await message.channel.send(f"✅ Đồng bộ thành công! Có {count} thông báo sẽ được gửi trong hôm nay.")
+
+        # Command: !list
+        if message.content == '!list':
+            if not notifications_data:
+                await message.channel.send("📭 Hiện không có thông báo nào đang chờ.")
+                return
+                
+            lines = ["📋 **Danh sách các mốc nhắc nhở đang chờ:**"]
+            # Sắp xếp các mốc giờ cho dễ nhìn
+            for iso_time in sorted(notifications_data.keys()):
+                events = notifications_data[iso_time]
+                # Lấy giờ từ chuỗi ISO để hiển thị gọn
+                display_time = iso_time.split('T')[1][:5] 
+                summaries = ", ".join([e['summary'] for e in events])
+                lines.append(f"• `{display_time}`: {summaries}")
+                
+            await message.channel.send("\n".join(lines))
+    else:
+        async with message.channel.typing():
+            try:
+                await function_call_execution(message)
+            except Exception as e:
+                await message.channel.send(f"⚠️ Lỗi khi xử lý yêu cầu: {e}")
 
 @tasks.loop(minutes=15)
 async def auto_sync_task():
     global notifications_data
     
     # Chạy hàm fetch trong thread riêng để không treo Bot
-    loop = client.loop
+    loop = client_discord.loop
     updated_data = await loop.run_in_executor(None, fetch_calendar_reminders, DEFAULT_REMINDER_MINUTES)
     
     # Gộp dữ liệu mới vào dữ liệu cũ (không ghi đè hoàn toàn để tránh mất các mốc hiện tại)
@@ -261,7 +325,7 @@ async def check_notifications():
                 for uid in USER_IDS:
                     try:
                         # Ưu tiên lấy từ bộ nhớ đệm (cache), nếu không thấy mới gọi API (fetch)
-                        user = client.get_user(uid) or await client.fetch_user(uid)
+                        user = client_discord.get_user(uid) or await client_discord.fetch_user(uid)
                         if user:
                             # Tạo nội dung tin nhắn từ danh sách sự kiện tại mốc giờ này
                             message_content = format_notification_content(events)
@@ -302,7 +366,7 @@ async def send_weather_summary(target, city: str = 'hanoi'):
     """Fetches today's weather summary (blocking call run in executor)
     and sends the returned text to `target` (a Channel or User).
     """
-    loop = client.loop
+    loop = client_discord.loop
     # Run the blocking network call in the default executor
     summary = await loop.run_in_executor(None, get_weather_forecast_string, city)
 
@@ -313,4 +377,4 @@ async def send_weather_summary(target, city: str = 'hanoi'):
     await target.send(summary)
 
 keep_alive()
-client.run(TOKEN)
+client_discord.run(TOKEN)
