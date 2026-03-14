@@ -173,8 +173,8 @@ def fetch_calendar_reminders(default_minutes: int = 30):
 
     return new_notifications
 
-# print("🔄 Đang lấy lịch trình sắp tới...")
-# print(get_upcoming_events())
+print("🔄 Đang lấy lịch trình sắp tới...")
+print(get_upcoming_events())
 
 # print("\n🔄 Đang lấy mốc nhắc nhở từ Google Calendar...")
 # print(fetch_calendar_reminders())
