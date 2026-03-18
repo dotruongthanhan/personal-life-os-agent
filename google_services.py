@@ -117,13 +117,6 @@ def get_upcoming_events():
         location = event.get('location')
         description = event.get('description')
 
-        # Format block cho 1 sự kiện
-        # event_block = (
-        #     f"{time_str} | 📌 **{summary}**\n"
-        #     f"   📍 *Địa điểm:* {location}\n"
-        #     f"   📝 *Mô tả:* {description}\n"
-        #     f"━━━━━━━━━━━━━━━━━━━━"
-        # )
         event_block = f"{time_str} | 📌 **{summary}**\n"
         if location:
             event_block += f"   📍 *Địa điểm:* {location}\n"
@@ -173,8 +166,8 @@ def fetch_calendar_reminders(default_minutes: int = 30):
 
     return new_notifications
 
-print("🔄 Đang lấy lịch trình sắp tới...")
-print(get_upcoming_events())
+# print("🔄 Đang lấy lịch trình sắp tới...")
+# print(get_upcoming_events())
 
 # print("\n🔄 Đang lấy mốc nhắc nhở từ Google Calendar...")
 # print(fetch_calendar_reminders())
