@@ -10,7 +10,7 @@ def get_info(location: str = None):
     Trả về: (local_name, lat, lon) dưới dạng tuple.
     """
     api_key = os.getenv('OPENWEATHER_API_KEY')
-    search_city = location or os.getenv('WEATHER_CITY', 'hanoi')
+    search_city = location or os.getenv('CITY', 'hanoi')
     
     url = f"http://api.openweathermap.org/geo/1.0/direct?q={search_city}&limit=1&appid={api_key}"
     
@@ -132,6 +132,29 @@ def get_weather_forecast_string(city = None):
         
     result += "\n".join(forecast_lines)
     return result
+
+def get_city_timezone(location: str = None):
+    """
+    Lấy múi giờ (timezone) của thành phố dựa trên OpenWeather API.
+    Trả về đối tượng datetime.timezone tương ứng.
+    """
+    info = get_info(location)
+    if not info:
+        return timezone.utc  # Trả về UTC mặc định nếu có lỗi
+        
+    _, lat, lon = info
+    api_key = os.getenv('OPENWEATHER_API_KEY')
+    url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}"
+    
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        tz_offset = data.get('timezone', 0)
+        return timezone(timedelta(seconds=tz_offset))
+    except Exception as e:
+        print(f"❌ Lỗi khi lấy timezone cho thành phố: {e}")
+        return timezone.utc
 
 # if __name__ == '__main__':
 #     print("🔄 Đang lấy dự báo thời tiết...")

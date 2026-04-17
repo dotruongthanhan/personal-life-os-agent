@@ -7,8 +7,13 @@ from googleapiclient.discovery import build
 from dotenv import load_dotenv
 import zoneinfo
 
-SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar.events',  # Quyền Tạo/Sửa/Xóa sự kiện
+    'https://www.googleapis.com/auth/calendar.readonly' # Quyền Đọc danh sách lịch và cài đặt
+]
 load_dotenv()
+
+CALENDAR_ID_PERSONAL = os.getenv("CALENDAR_ID_PERSONAL", "primary")
 
 def get_calendar_service():
     """Khởi tạo và xác thực dịch vụ Google Calendar API"""
@@ -46,15 +51,11 @@ def get_calendar_ids_from_env():
             
     return calendar_ids
 
-def get_calendars():
-    """Lấy danh sách các calendar của user"""
+def list_user_calendars():
+    """Lấy danh sách tên và ID các lịch của người dùng."""
     service = get_calendar_service()
     calendar_list = service.calendarList().list().execute()
-    calendars = calendar_list.get('items', [])
-    
-    print("📋 Danh sách Calendar:")
-    for cal in calendars:
-        print(f"- {cal['summary']} (ID: {cal['id']})")
+    return [{"id": cal["id"], "summary": cal["summary"]} for cal in calendar_list['items']]
 
 def get_raw_events_today():
     """Hàm lõi để lấy danh sách sự kiện thô từ Google"""
@@ -87,6 +88,37 @@ def get_raw_events_today():
             print(f"⚠️ Lỗi đọc {cal_id}: {e}")
             
     return all_items, user_tz, now
+
+def get_clean_events_today():
+    """Hàm wrapper để gọi get_raw_events_today và trả về kết quả đã được xử lý"""
+    events, user_tz, _ = get_raw_events_today()
+    if not events:
+        return []
+    
+    # Chuyển đổi thời gian về múi giờ người dùng và định dạng lại
+    clean_events = []
+    
+    for event in events:
+        # 1. Xử lý thời gian (lấy dateTime hoặc date cho sự kiện cả ngày)
+        start_raw = event['start'].get('dateTime', event['start'].get('date'))
+        end_raw = event['end'].get('dateTime', event['end'].get('date'))
+        
+        # Chuyển đổi sang múi giờ người dùng để AI dễ đọc
+        start_dt = datetime.fromisoformat(start_raw.replace('Z', '+00:00')).astimezone(user_tz)
+        end_dt = datetime.fromisoformat(end_raw.replace('Z', '+00:00')).astimezone(user_tz)
+        
+        # 2. Chỉ trích xuất các trường thiết yếu
+        clean_event = {
+            "event_id": event.get('id'),
+            "summary": event.get('summary', 'Không có tiêu đề'),
+            "description": event.get('description', ''),
+            "start": start_dt.strftime('%Y-%m-%d %H:%M'),
+            "end": end_dt.strftime('%Y-%m-%d %H:%M'),
+            "location": event.get('location', '')
+        }
+        clean_events.append(clean_event)
+    
+    return clean_events
 
 def get_upcoming_events():
     """Lấy danh sách sự kiện sắp tới"""
@@ -166,8 +198,126 @@ def fetch_calendar_reminders(default_minutes: int = 30):
 
     return new_notifications
 
-# print("🔄 Đang lấy lịch trình sắp tới...")
-# print(get_upcoming_events())
+def create_event(summary: str, start: str, calendar_id: str = CALENDAR_ID_PERSONAL,
+                 duration_minutes: int = 60, description: str = "", 
+                 location: str = "", priority: str = "low"):
+    """
+    Tạo sự kiện trên một lịch cụ thể với múi giờ tự động khớp với lịch đó.
+    - start: Chuỗi thời gian (VD: "2026-03-20 15:00")
+    - calendar_id: ID của lịch (mặc định là 'primary')
+    """
+    service = get_calendar_service()
 
-# print("\n🔄 Đang lấy mốc nhắc nhở từ Google Calendar...")
-# print(fetch_calendar_reminders())
+    try:
+        # 1. Lấy múi giờ của Calendar mục tiêu
+        calendar_info = service.calendars().get(calendarId=calendar_id).execute()
+        tz_name = calendar_info.get('timeZone', 'UTC')
+        user_tz = zoneinfo.ZoneInfo(tz_name)
+
+        # 2. Xử lý thời gian dựa trên múi giờ của lịch
+        # Giả sử AI hoặc User nhập "2026-03-20 15:00", ta gán múi giờ của lịch vào
+        naive_start = datetime.strptime(start, "%Y-%m-%d %H:%M")
+        localized_start = naive_start.replace(tzinfo=user_tz)
+        localized_end = localized_start + timedelta(minutes=duration_minutes)
+
+        # 3. Xử lý Priority Emoji
+        priority_map = {"high": "🔴", "medium": "🟡", "low": "⚪"}
+        emoji = priority_map.get(priority.lower(), "⚪")
+        full_summary = f"{emoji} {summary}"
+
+        event_body = {
+            'summary': full_summary,
+            'location': location,
+            'description': description,
+            'start': {'dateTime': localized_start.isoformat(), 'timeZone': tz_name},
+            'end': {'dateTime': localized_end.isoformat(), 'timeZone': tz_name},
+        }
+
+        event = service.events().insert(calendarId=calendar_id, body=event_body).execute()
+        return {
+            "status": "success", 
+            "event_title": event.get('summary'),
+            "calendar": calendar_info.get('summary'),
+            "timezone": tz_name
+        }
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    
+def update_event(event_id: str = None, calendar_id: str = CALENDAR_ID_PERSONAL, summary: str = None,
+                 start: str = None, end: str = None, priority: str = None,
+                 description: str = None, location: str = None, **kwargs):
+    """
+    Cập nhật một sự kiện đã có dựa trên id.
+    """
+    # Xử lý trường hợp LLM truyền nhầm argument 'id' thay vì 'event_id'
+    event_id = event_id or kwargs.get('id')
+
+    service = get_calendar_service()
+    
+    try:
+        # Lấy múi giờ của Calendar mục tiêu
+        calendar_info = service.calendars().get(calendarId=calendar_id).execute()
+        tz_name = calendar_info.get('timeZone', 'UTC')
+        user_tz = zoneinfo.ZoneInfo(tz_name)
+
+        # Lấy dữ liệu hiện tại của sự kiện
+        event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
+        
+        # Cập nhật Tiêu đề & Priority nếu có thay đổi
+        if summary or priority:
+            current_title = event.get('summary', '')
+            # Xóa emoji cũ nếu có để tránh lặp (🔴 🔴 Tiêu đề)
+            clean_title = current_title.lstrip("🔴🟡⚪ ").strip()
+            
+            new_title = summary if summary else clean_title
+            new_priority = priority if priority else "low" # Mặc định nếu không rõ
+            
+            priority_map = {"high": "🔴", "medium": "🟡", "low": "⚪"}
+            emoji = priority_map.get(new_priority.lower(), "⚪")
+            event['summary'] = f"{emoji} {new_title}"
+
+        if start:
+            # Xử lý giờ + múi giờ --> Giờ ISO với múi giờ của lịch
+            naive_start = datetime.strptime(start, "%Y-%m-%d %H:%M")
+            localized_start = naive_start.replace(tzinfo=user_tz)
+            event['start'] = {'dateTime': localized_start.isoformat()}
+
+        if end:
+            # Xử lý giờ + múi giờ --> Giờ ISO với múi giờ của lịch
+            naive_end = datetime.strptime(end, "%Y-%m-%d %H:%M")
+            localized_end = naive_end.replace(tzinfo=user_tz)
+            event['end'] = {'dateTime': localized_end.isoformat()}
+            
+        if description: event['description'] = description
+        if location: event['location'] = location
+
+        updated_event = service.events().update(calendarId=calendar_id, eventId=event_id, body=event).execute()
+        return {"status": "success", "updated_title": updated_event.get('summary')}
+    
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+if __name__ == "__main__":
+    print("🔄 Đang lấy lịch trình sắp tới...")
+    print(get_upcoming_events())
+    print(get_raw_events_today())
+
+    print(update_event(
+        event_id="vajr740tn6e27738b9u97cn3dk",  # Thay bằng ID sự kiện thực tế
+        cal_id="primary",
+        title="Họp nhóm dự án - Cập nhật",
+        priority="high",
+        description="Đã cập nhật mô tả và ưu tiên."
+    ))
+
+    print(create_event(
+        title="Họp nhóm dự án",
+        start="2026-03-20 15:00",
+        description="Thảo luận về tiến độ và kế hoạch tiếp theo.",
+        location="Deakin University",
+        priority="medium"
+    ))
+
+    print("\n🔄 Đang lấy mốc nhắc nhở từ Google Calendar...")
+    print(fetch_calendar_reminders())
