@@ -13,15 +13,16 @@ MODEL_ID = "gemini-3.1-flash-lite-preview"
 
 async def function_call_execution(channel, prompt: str):
     try:
+        system_instruction = f"""Bạn là Life-OS Agent thông minh, trợ lý ảo cá nhân cho người dùng để thông báo, thêm, thay đổi thông tin sự kiện trên Google Calendar và cung cấp dữ liệu thời tiết. Hãy trả lời ngắn gọn, súc tích và ưu tiên gọi hàm khi cần thao tác với lịch hoặc thời tiết.
+                                Chức năng chính của bạn là Function Call. Khi người dùng gửi yêu cầu cần gọi hàm, chú ý dùng đúng tên hàm và định dạng argument theo đúng tools.
+                                Context: hôm nay là ngày {datetime.datetime.now().strftime("%d/%m/%Y")}"""
         # Lượt 1: Gửi tin nhắn ban đầu
         interaction = await asyncio.to_thread(
             client_gemini.interactions.create,
             model=MODEL_ID,
             input=prompt,
             tools=tools,
-            system_instruction=f"""Bạn là Life-OS Agent thông minh, trợ lý ảo cá nhân cho người dùng để thông báo, thêm, thay đổi thông tin sự kiện trên Google Calendar và cung cấp dữ liệu thời tiết. Hãy trả lời ngắn gọn, súc tích và ưu tiên gọi hàm khi cần thao tác với lịch hoặc thời tiết.
-                                Chức năng chính của bạn là Function Call. Khi người dùng gửi yêu cầu cần gọi hàm, chú ý dùng đúng tên hàm và định dạng argument theo đúng tools.
-                                Context: hôm nay là ngày {datetime.datetime.now().strftime("%d/%m/%Y")}"""
+            system_instruction=system_instruction
         )
 
         # Vòng lặp xử lý cho đến khi AI trả về Text (hết yêu cầu gọi hàm)
@@ -44,7 +45,9 @@ async def function_call_execution(channel, prompt: str):
                         print(f"System: Kết quả hàm {fn_name}: {result}")
                         
                         # Bắt buộc kết quả hàm phải là một Dictionary (JSON Object) để API không bị nhầm lẫn
-                        if not isinstance(result, dict):
+                        if not result: # Xử lý trường hợp kết quả rỗng (None, [], "", {})
+                            result = {"message": "Không tìm thấy dữ liệu."}
+                        elif not isinstance(result, dict):
                             result = {"data": result}
                             
                         function_responses.append({
@@ -57,7 +60,9 @@ async def function_call_execution(channel, prompt: str):
                         await channel.send(f"⚠️ Hàm {fn_name} chưa được hỗ trợ.")
 
                 elif hasattr(output, 'text') and output.text:
-                    await channel.send(output.text)
+                    text = output.text
+                    for i in range(0, len(text), 2000):
+                        await channel.send(text[i:i+2000])
 
             if not has_function_call:
                 break
@@ -72,7 +77,8 @@ async def function_call_execution(channel, prompt: str):
                         client_gemini.interactions.create,
                         model=MODEL_ID,
                         previous_interaction_id=interaction.id,
-                        input=function_responses
+                        input=function_responses,
+                        system_instruction=system_instruction
                     )
                     interaction_success = True
                 except Exception as call_error:

@@ -303,21 +303,21 @@ if __name__ == "__main__":
     print(get_upcoming_events())
     print(get_raw_events_today())
 
-    print(update_event(
-        event_id="vajr740tn6e27738b9u97cn3dk",  # Thay bằng ID sự kiện thực tế
-        cal_id="primary",
-        title="Họp nhóm dự án - Cập nhật",
-        priority="high",
-        description="Đã cập nhật mô tả và ưu tiên."
-    ))
+    # print(update_event(
+    #     event_id="vajr740tn6e27738b9u97cn3dk",  # Thay bằng ID sự kiện thực tế
+    #     cal_id="primary",
+    #     title="Họp nhóm dự án - Cập nhật",
+    #     priority="high",
+    #     description="Đã cập nhật mô tả và ưu tiên."
+    # ))
 
-    print(create_event(
-        title="Họp nhóm dự án",
-        start="2026-03-20 15:00",
-        description="Thảo luận về tiến độ và kế hoạch tiếp theo.",
-        location="Deakin University",
-        priority="medium"
-    ))
+    # print(create_event(
+    #     title="Họp nhóm dự án",
+    #     start="2026-03-20 15:00",
+    #     description="Thảo luận về tiến độ và kế hoạch tiếp theo.",
+    #     location="Deakin University",
+    #     priority="medium"
+    # ))
 
-    print("\n🔄 Đang lấy mốc nhắc nhở từ Google Calendar...")
-    print(fetch_calendar_reminders())
+    # print("\n🔄 Đang lấy mốc nhắc nhở từ Google Calendar...")
+    # print(fetch_calendar_reminders())
