@@ -33,10 +33,10 @@ def get_info(location: str = None):
         print(f"❌ Lỗi khi lấy tọa độ: {e}")
         return None
     
-def get_weather_forecast_data(location: str = None):
+def get_weather_forecast_data(location: str = None, target_date_str: str = None):
     """
     Sử dụng get_info để lấy thông tin vị trí, sau đó lấy dự báo thời tiết.
-    Input: location (Tên thành phố)
+    Input: location (Tên thành phố), target_date_str (Ngày định dạng YYYY-MM-DD)
     """
     # 1. Lấy thông tin vị trí từ hàm get_info
     info = get_info(location)
@@ -61,8 +61,18 @@ def get_weather_forecast_data(location: str = None):
         now_local = datetime.now(local_tz)
         today_date = now_local.date()
         
+        if target_date_str:
+            try:
+                target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return {"error": "Định dạng ngày không hợp lệ. Vui lòng kiểm tra lại và sử dụng đúng định dạng 'YYYY-MM-DD'."}
+        else:
+            target_date = today_date
+        
+        if (target_date - today_date).days > 5 or (target_date - today_date).days < 0:
+            return {"error": "Dữ liệu thời tiết chỉ hỗ trợ trong phạm vi 5 ngày tới kể từ hôm nay."}
+
         forecast_list = data.get('list', [])
-        today_str = datetime.now().strftime('%Y-%m-%d')
         result = []
 
         for entry in forecast_list:
@@ -70,10 +80,12 @@ def get_weather_forecast_data(location: str = None):
             dt_unix = entry.get('dt')
             dt_local = datetime.fromtimestamp(dt_unix, local_tz)
             
-            # ĐIỀU KIỆN LỌC:
-            # 1. Phải là ngày hôm nay (theo giờ địa phương)
-            # 2. Phải lớn hơn hoặc bằng thời gian hiện tại
-            if dt_local.date() == today_date and dt_local >= now_local:
+            # ĐIỀU KIỆN LỌC: Phải khớp với target_date
+            if dt_local.date() == target_date:
+                # Nếu là hôm nay, chỉ lấy thời gian từ bây giờ trở đi
+                if target_date == today_date and dt_local < now_local:
+                    continue
+
                 weather_info = {
                     "time": dt_local.strftime('%H:%M'),
                     "temp": entry['main'].get('temp'),
@@ -94,14 +106,17 @@ def get_weather_forecast_data(location: str = None):
         print(f"❌ Lỗi khi lấy dự báo thời tiết cho {local_name}: {e}")
         return []
 
-def get_weather_forecast_string(city = None):
-    """Lấy dự báo thời tiết các mốc giờ trong ngày hôm nay dạng string"""
+def get_weather_forecast_string(city = None, target_date_str: str = None):
+    """Lấy dự báo thời tiết các mốc giờ trong một ngày dạng string"""
 
+    date_display = target_date_str if target_date_str else "hôm nay"
     try:
         local_name, _, _ = get_info(city)
-        data = get_weather_forecast_data(city)
+        data = get_weather_forecast_data(city, target_date_str)
+        if isinstance(data, dict) and "error" in data:
+            return f"⚠️ {data['error']}"
         if not data:
-            return f"⚠️ Không có dữ liệu dự báo thời tiết cho {local_name} hôm nay."
+            return f"⚠️ Không có dữ liệu dự báo thời tiết cho {local_name} {date_display}."
     except Exception as e:
         return f"❌ Lỗi khi lấy dữ liệu thời tiết: {e}"
     
@@ -111,7 +126,7 @@ def get_weather_forecast_string(city = None):
     max_t = max(temps)
     forecast_lines = []
 
-    result = f"\n🌤️ **Dự báo thời tiết {local_name} hôm nay:**\n"
+    result = f"\n🌤️ **Dự báo thời tiết {local_name} ngày {date_display}:**\n"
     result += f"🌡️ Nhiệt độ trong ngày: **{min_t}°C - {max_t}°C**\n"
 
     # Quét qua danh sách dự báo
@@ -156,6 +171,6 @@ def get_city_timezone(location: str = None):
         print(f"❌ Lỗi khi lấy timezone cho thành phố: {e}")
         return timezone.utc
 
-# if __name__ == '__main__':
-#     print("🔄 Đang lấy dự báo thời tiết...")
-#     print(get_weather_forecast_string("Sydney"))
+if __name__ == '__main__':
+    print("🔄 Đang lấy dự báo thời tiết...")
+    print(get_weather_forecast_string("melbounre", "2026-04-23"))

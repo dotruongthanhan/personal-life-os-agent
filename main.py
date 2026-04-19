@@ -21,6 +21,7 @@ if not os.path.exists('credentials.json'):
     with open('credentials.json', 'w') as f:
         f.write(cred_data)
 
+# Nếu không tìm thấy file token.json
 if not os.path.exists('token.json'):
     token_data = os.getenv('GOOGLE_TOKEN_JSON', '{}')
     with open('token.json', 'w') as f:
@@ -94,7 +95,7 @@ async def daily_briefing():
         try:
             user = await client_discord.fetch_user(uid)
             if user:
-                await user.send("**🔔 Chào buổi sáng! Đây là báo cáo lịch trình và thời tiết hàng ngày của bạn.**")
+                await user.send(f"**🔔 Chào buổi sáng {user.mention}! Đây là báo cáo lịch trình và thời tiết hàng ngày của bạn.**")
                 await execute_briefing_logic(user)
                 await send_weather_summary(user)
                 print(f"System: Đã gửi báo cáo định kỳ lịch trình và thời tiết {run_time.strftime('%H:%M')} AM cho {user.name} ({uid}).")
@@ -106,7 +107,7 @@ def instructions():
         "🛠️ **DANH SÁCH LỆNH ĐIỀU KHIỂN:**\n"
         "▸ `!help` : Hiển thị danh sách lệnh.\n"
         "▸ `!ping` : Kiểm tra kết nối và độ trễ của Bot.\n"
-        "▸ `!weather [city]` : Lấy thông tin thời tiết cho thành phố cụ thể (Mặc định: Hà Nội).\n"
+        "▸ `!weather [city] [YYYY-MM-DD]` : Lấy thông tin thời tiết cho thành phố cụ thể (Mặc định: Hà Nội).\n"
         "▸ `!briefing` : Trích xuất và gửi ngay báo cáo lịch trình trong ngày hôm nay.\n"
         "▸ `!sync` : Đồng bộ thủ công reminders từ Google Calendar.\n"
         "▸ `!list` : Hiển thị danh sách các mốc nhắc nhở đang chờ.\n"
@@ -210,11 +211,15 @@ async def on_message(message):
         # Command: !weather [city]
         if message.content.startswith('!weather'):
             # Split and allow optional city argument
-            parts = message.content.split(maxsplit=1)
-            prompt = "Đưa ra lời khuyên cho người dùng về trang phục và vật dụng nên mang dựa theo dữ liệu thời tiết Hà Nội. Giới hạn câu trả lời trong tối đa 20 từ."
+            parts = message.content.split(maxsplit=2)
+            prompt = "Đưa ra lời khuyên cho người dùng về trang phục và vật dụng nên mang dựa theo dữ liệu thời tiết Hà Nội ngày hôm nay. Giới hạn câu trả lời trong tối đa 20 từ."
             if len(parts) > 1:
                 prompt = prompt.replace("Hà Nội", parts[1]) # Thay thế thành phố trong prompt nếu có
-                await send_weather_summary(message.channel, city=parts[1]) # Gửi thành phố cụ thể
+                if len(parts) > 2:
+                    await send_weather_summary(message.channel, city=parts[1], target_date_str=parts[2]) # Gửi thành phố và ngày cụ thể
+                    prompt = prompt.replace("hôm nay", parts[2]) # Thay thế ngày trong prompt nếu có
+                else:
+                    await send_weather_summary(message.channel, city=parts[1]) # Gửi thành phố cụ thể
             else:
                 await send_weather_summary(message.channel) # Gửi mặc định Hà Nội
 
@@ -226,7 +231,8 @@ async def on_message(message):
             try:
                 # Gọi hàm logic, truyền đích đến là Channel (nơi user gõ lệnh)
                 await execute_briefing_logic(message.channel)
-            except Exception as e:                await message.channel.send(f"❌ Lỗi khi lấy dữ liệu: {e}")
+            except Exception as e:
+                await message.channel.send(f"❌ Lỗi khi lấy dữ liệu: {e}")
 
         # Command: !sync
         if message.content == '!sync':
@@ -306,7 +312,7 @@ async def check_notifications():
                         if user:
                             # Tạo nội dung tin nhắn từ danh sách sự kiện tại mốc giờ này
                             message_content = format_notification_content(events)
-                            await user.send(message_content)
+                            await user.send(f"{user.mention}\n{message_content}")
                     except Exception as e:
                         print(f"⚠️ Lỗi gửi tin nhắn cho {uid}: {e}")
                 
@@ -339,13 +345,13 @@ def format_notification_content(events):
         msg += "────────────────────\n"
     return msg
 
-async def send_weather_summary(target, city: str = 'hanoi'):
+async def send_weather_summary(target, city: str = 'hanoi', target_date_str: str = None):
     """Fetches today's weather summary (blocking call run in executor)
     and sends the returned text to `target` (a Channel or User).
     """
     loop = client_discord.loop
     # Run the blocking network call in the default executor
-    summary = await loop.run_in_executor(None, get_weather_forecast_string, city)
+    summary = await loop.run_in_executor(None, get_weather_forecast_string, city, target_date_str)
 
     # Ensure we have some text to send
     if not summary:
