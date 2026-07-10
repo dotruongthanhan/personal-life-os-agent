@@ -199,8 +199,7 @@ def fetch_calendar_reminders(default_minutes: int = 30):
     return new_notifications
 
 def create_event(summary: str, start: str, calendar_id: str = CALENDAR_ID_PERSONAL,
-                 duration_minutes: int = 60, description: str = "", 
-                 location: str = "", priority: str = "low"):
+                 duration_minutes: int = 60, description: str = "", location: str = ""):
     """
     Tạo sự kiện trên một lịch cụ thể với múi giờ tự động khớp với lịch đó.
     - start: Chuỗi thời gian (VD: "2026-03-20 15:00")
@@ -220,13 +219,8 @@ def create_event(summary: str, start: str, calendar_id: str = CALENDAR_ID_PERSON
         localized_start = naive_start.replace(tzinfo=user_tz)
         localized_end = localized_start + timedelta(minutes=duration_minutes)
 
-        # 3. Xử lý Priority Emoji
-        priority_map = {"high": "🔴", "medium": "🟡", "low": "⚪"}
-        emoji = priority_map.get(priority.lower(), "⚪")
-        full_summary = f"{emoji} {summary}"
-
         event_body = {
-            'summary': full_summary,
+            'summary': summary,
             'location': location,
             'description': description,
             'start': {'dateTime': localized_start.isoformat(), 'timeZone': tz_name},
@@ -245,8 +239,8 @@ def create_event(summary: str, start: str, calendar_id: str = CALENDAR_ID_PERSON
         return {"status": "error", "message": str(e)}
     
 def update_event(event_id: str = None, calendar_id: str = CALENDAR_ID_PERSONAL, summary: str = None,
-                 start: str = None, end: str = None, priority: str = None,
-                 description: str = None, location: str = None, **kwargs):
+                 start: str = None, end: str = None, description: str = None,
+                 location: str = None, **kwargs):
     """
     Cập nhật một sự kiện đã có dựa trên id.
     """
@@ -264,18 +258,9 @@ def update_event(event_id: str = None, calendar_id: str = CALENDAR_ID_PERSONAL, 
         # Lấy dữ liệu hiện tại của sự kiện
         event = service.events().get(calendarId=calendar_id, eventId=event_id).execute()
         
-        # Cập nhật Tiêu đề & Priority nếu có thay đổi
-        if summary or priority:
-            current_title = event.get('summary', '')
-            # Xóa emoji cũ nếu có để tránh lặp (🔴 🔴 Tiêu đề)
-            clean_title = current_title.lstrip("🔴🟡⚪ ").strip()
-            
-            new_title = summary if summary else clean_title
-            new_priority = priority if priority else "low" # Mặc định nếu không rõ
-            
-            priority_map = {"high": "🔴", "medium": "🟡", "low": "⚪"}
-            emoji = priority_map.get(new_priority.lower(), "⚪")
-            event['summary'] = f"{emoji} {new_title}"
+        if summary:
+            # The summary is updated directly without emoji logic.
+            event['summary'] = summary
 
         if start:
             # Xử lý giờ + múi giờ --> Giờ ISO với múi giờ của lịch
@@ -302,22 +287,3 @@ if __name__ == "__main__":
     print("🔄 Đang lấy lịch trình sắp tới...")
     print(get_upcoming_events())
     print(get_raw_events_today())
-
-    # print(update_event(
-    #     event_id="vajr740tn6e27738b9u97cn3dk",  # Thay bằng ID sự kiện thực tế
-    #     cal_id="primary",
-    #     title="Họp nhóm dự án - Cập nhật",
-    #     priority="high",
-    #     description="Đã cập nhật mô tả và ưu tiên."
-    # ))
-
-    # print(create_event(
-    #     title="Họp nhóm dự án",
-    #     start="2026-03-20 15:00",
-    #     description="Thảo luận về tiến độ và kế hoạch tiếp theo.",
-    #     location="Deakin University",
-    #     priority="medium"
-    # ))
-
-    # print("\n🔄 Đang lấy mốc nhắc nhở từ Google Calendar...")
-    # print(fetch_calendar_reminders())

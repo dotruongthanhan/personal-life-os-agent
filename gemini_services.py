@@ -1,5 +1,4 @@
 import os
-import json
 import datetime
 import asyncio
 from google import genai
@@ -30,11 +29,11 @@ async def function_call_execution(channel, prompt: str):
             function_responses = []
             has_function_call = False
 
-            for output in interaction.outputs:
-                if output.type == "function_call":
+            for step in interaction.steps:
+                if step.type == "function_call":
                     has_function_call = True
-                    fn_name = output.name
-                    fn_args = output.arguments
+                    fn_name = step.name
+                    fn_args = step.arguments
                     
                     print(f"System: AI yêu cầu gọi function {fn_name} với argument {fn_args}")
                     
@@ -53,18 +52,15 @@ async def function_call_execution(channel, prompt: str):
                         function_responses.append({
                             "type": "function_result",
                             "name": fn_name,
-                            "call_id": output.id,
+                            "call_id": step.id,
                             "result": result
                         })
                     else:
                         await channel.send(f"⚠️ Hàm {fn_name} chưa được hỗ trợ.")
 
-                elif hasattr(output, 'text') and output.text:
-                    text = output.text
-                    for i in range(0, len(text), 2000):
-                        await channel.send(text[i:i+2000])
-
-            if not has_function_call:
+            if not has_function_call:   # Nếu không còn yêu cầu gọi hàm, gửi kết quả cuối cùng cho người dùng
+                final_response = interaction.output_text or "⚠️ Không có phản hồi từ AI."
+                await channel.send(final_response)
                 break
 
             max_retries = 3

@@ -35,9 +35,8 @@ tools = [
                 "start": {"type": "string", "description": "Format: 'YYYY-MM-DD HH:MM'"},
                 "calendar_id": {"type": "string"},
                 "duration_minutes": {"type": "integer", "default": 60},
-                "priority": {"type": "string", "enum": ["high", "medium", "low"]},
-                "location": {"type": "string"},
-                "description": {"type": "string", "default": "low"}
+                "description": {"type": "string", "default": "low"},
+                "location": {"type": "string", "description": "Địa điểm sự kiện"}
             },
             "required": ["summary", "start"]
         }
@@ -51,12 +50,11 @@ tools = [
             "properties": {
                 "event_id": {"type": "string", "description": "ID chính xác của sự kiện"},
                 "calendar_id": {"type": "string", "description": "ID của lịch chứa sự kiện"},
-                "summary": {"type": "string"},
+                "summary": {"type": "string", "description": "Tiêu đề sự kiện"},
                 "start": {"type": "string", "description": "Format: 'YYYY-MM-DD HH:MM'"},
                 "end": {"type": "string", "description": "Format: 'YYYY-MM-DD HH:MM'"},
-                "priority": {"type": "string", "enum": ["high", "medium", "low"]},
-                "description": {"type": "string"},
-                "location": {"type": "string"}
+                "description": {"type": "string", "description": "Mô tả sự kiện"},
+                "location": {"type": "string", "description": "Địa điểm sự kiện"}
             },
             "required": ["event_id"]
         }
