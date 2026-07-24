@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+echo "-----> Running post-compile: Upgrading Google Generative AI"
+pip install --upgrade google-genai
