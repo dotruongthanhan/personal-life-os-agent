@@ -1,4 +1,3 @@
-# personal-life-os-agent
 # Personal Life OS Agent
 
 The Personal Life OS Agent is an intelligent Discord bot designed to act as a personal assistant. It integrates with Google Calendar and weather services to provide daily briefings, on-demand information, and event management through a conversational interface powered by Google's Gemini AI.
