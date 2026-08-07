@@ -57,29 +57,38 @@ def list_user_calendars():
     calendar_list = service.calendarList().list().execute()
     return [{"id": cal["id"], "summary": cal["summary"]} for cal in calendar_list['items']]
 
-def get_raw_events_today():
-    """Hàm lõi để lấy danh sách sự kiện thô từ Google"""
+def get_raw_events(target_date_str: str = None):
+    """
+    Hàm lõi để lấy danh sách sự kiện thô từ Google.
+    - Nếu có target_date_str (YYYY-MM-DD), lấy sự kiện trong ngày đó.
+    - Nếu không, lấy sự kiện trong 30 ngày tới.
+    """
     service = get_calendar_service()
     calendar_ids = get_calendar_ids_from_env()
-    
-    # Lấy múi giờ linh hoạt
-    try:
-        primary_cal = service.calendars().get(calendarId=calendar_ids[0]).execute()
-        tz_name = primary_cal.get('timeZone', 'Asia/Ho_Chi_Minh')
-    except:
-        tz_name = 'Asia/Ho_Chi_Minh'
-    
+
+    # Lấy múi giờ theo calendar chính
+    calendar_info = service.calendars().get(calendarId=calendar_ids[0]).execute()
+    tz_name = calendar_info.get('timeZone', 'UTC')
     user_tz = zoneinfo.ZoneInfo(tz_name)
     now = datetime.now(user_tz)
-    end_of_day = now.replace(hour=23, minute=59, second=59, microsecond=0)
+
+    if target_date_str:
+        # Lấy sự kiện cho một ngày cụ thể
+        target_date = datetime.strptime(target_date_str, "%Y-%m-%d").astimezone(user_tz)
+        time_min = target_date.replace(hour=0, minute=0, second=0)
+        time_max = target_date.replace(hour=23, minute=59, second=59)
+    else:
+        # Mặc định: lấy 30 ngày tới
+        time_min = now
+        time_max = now + timedelta(days=30)
 
     all_items = []
     for cal_id in calendar_ids:
         try:
             result = service.events().list(
                 calendarId=cal_id,
-                timeMin=now.isoformat(),
-                timeMax=end_of_day.isoformat(),
+                timeMin=time_min.isoformat(),
+                timeMax=time_max.isoformat(),
                 singleEvents=True,
                 orderBy='startTime'
             ).execute()
@@ -89,9 +98,13 @@ def get_raw_events_today():
             
     return all_items, user_tz, now
 
-def get_clean_events_today():
-    """Hàm wrapper để gọi get_raw_events_today và trả về kết quả đã được xử lý"""
-    events, user_tz, _ = get_raw_events_today()
+def get_clean_events(target_date_str: str = None):
+    """
+    Lấy danh sách sự kiện đã được xử lý cho một ngày cụ thể hoặc 30 ngày tới.
+    - target_date_str: Ngày cần xem (YYYY-MM-DD). Bỏ trống để xem 30 ngày tới.
+    """
+    events, user_tz, _ = get_raw_events(target_date_str)
+
     if not events:
         return []
     
@@ -121,21 +134,35 @@ def get_clean_events_today():
     return clean_events
 
 def get_upcoming_events():
-    """Lấy danh sách sự kiện sắp tới"""
+    """Lấy danh sách sự kiện sắp tới trong ngày hôm nay."""
 
-    all_events, _, __ = get_raw_events_today()
-    if not all_events:
+    # Gọi get_raw_events một lần để lấy tất cả sự kiện trong 30 ngày tới
+    # và thông tin múi giờ, thời gian hiện tại của người dùng.
+    all_raw_events, user_tz, now = get_raw_events()
+    
+    if not all_raw_events:
         return '📭 Không tìm thấy sự kiện nào trong ngày hôm nay.'
+
+    # Lọc ra chỉ những sự kiện diễn ra trong ngày hôm nay
+    today_events = []
+    for event in all_raw_events:
+        start_raw = event['start'].get('dateTime', event['start'].get('date'))
+        start_dt = datetime.fromisoformat(start_raw.replace('Z', '+00:00')).astimezone(user_tz)
+        if start_dt.date() == now.date():
+            today_events.append(event)
+
+    if not today_events:
+        return '📭 Không tìm thấy sự kiện nào trong ngày hôm nay.' # Cập nhật thông báo nếu không có sự kiện nào sau khi lọc
 
     # 2. Sắp xếp tất cả sự kiện theo thời gian bắt đầu (startTime)
     # Chúng ta dùng get('dateTime') cho sự kiện có giờ, và get('date') cho sự kiện cả ngày
-    all_events.sort(key=lambda x: x['start'].get('dateTime', x['start'].get('date')))
+    today_events.sort(key=lambda x: x['start'].get('dateTime', x['start'].get('date')))
 
     # 3. Tạo chuỗi kết quả trả về
     result = ""
-    result_lines = []
+    result_lines = [] # Đổi tên biến để tránh nhầm lẫn với all_raw_events
     
-    for event in all_events:
+    for event in today_events:
         # Lấy thời gian
         start_raw = event['start'].get('dateTime', event['start'].get('date')).replace('Z', '+00:00')
         end_raw = event['end'].get('dateTime', event['end'].get('date')).replace('Z', '+00:00')
@@ -164,7 +191,7 @@ def fetch_calendar_reminders(default_minutes: int = 30):
     Lấy danh sách các mốc thông báo từ Google Calendar.
     Mặc định nhắc trước 30 phút nếu event không có reminder.
     """
-    events, user_tz, now = get_raw_events_today()
+    events, user_tz, now = get_raw_events() # Lấy 30 ngày tới
     new_notifications = {}
 
     for event in events:
@@ -285,5 +312,5 @@ def update_event(event_id: str = None, calendar_id: str = CALENDAR_ID_PERSONAL, 
 
 if __name__ == "__main__":
     print("🔄 Đang lấy lịch trình sắp tới...")
-    print(get_upcoming_events())
-    print(get_raw_events_today())
+    # print(get_upcoming_events())
+    print(get_clean_events(target_date_str="2026-08-01"))

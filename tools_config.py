@@ -1,5 +1,5 @@
 from weather_service import get_weather_forecast_data
-from google_services import get_clean_events_today, create_event, list_user_calendars, update_event
+from google_services import get_clean_events, create_event, list_user_calendars, update_event
 
 tools = [
     {
@@ -17,11 +17,14 @@ tools = [
     },
     {
         "type": "function",
-        "name": "get_clean_events_today",
-        "description": "Lấy dữ liệu các sự kiện diễn ra trong ngày hôm nay, bao gồm event_id, tiêu đề, thời gian",
+        "name": "get_clean_events",
+        "description": "Lấy danh sách sự kiện từ lịch. Nếu không có ngày cụ thể, sẽ lấy sự kiện trong 30 ngày tới. Dùng hàm này để lấy event_id cho việc cập nhật hoặc xóa sự kiện.",
         "parameters": {
             "type": "object",
-            "properties": {}
+            "properties": {
+                "target_date_str": {"type": "string", "description": "Ngày muốn xem sự kiện theo định dạng 'YYYY-MM-DD'. Bỏ trống nếu muốn xem 30 ngày tới."}
+            },
+            "required": []
         }
     },
     {
@@ -44,7 +47,7 @@ tools = [
     {
         "type": "function",
         "name": "update_event",
-        "description": "Cập nhật sự kiện. Lấy event_id từ hàm get_clean_events_today.",
+        "description": "Cập nhật sự kiện. Lấy event_id từ hàm get_clean_events.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -63,7 +66,7 @@ tools = [
 
 available_functions = {
     "get_weather_forecast_data": get_weather_forecast_data,
-    "get_clean_events_today": get_clean_events_today,
+    "get_clean_events": get_clean_events,
     "create_event": create_event,
     "list_user_calendars": list_user_calendars,
     "update_event": update_event

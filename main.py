@@ -10,6 +10,7 @@ import asyncio
 from weather_service import get_weather_forecast_string, get_city_timezone
 from google_services import get_upcoming_events, fetch_calendar_reminders
 from gemini_services import function_call_execution
+import shared_context
 
 # Giữ cho bot luôn chạy
 from keep_alive import keep_alive
@@ -75,9 +76,13 @@ intents.message_content = True
 client_discord = discord.Client(intents=intents)
 
 # Cấu hình múi giờ linh hoạt theo biến CITY trong .env
-city_name = os.getenv('CITY', 'hanoi')
-local_timezone = get_city_timezone(city_name)
-run_time = datetime.time(hour=7, minute=0, second=0, tzinfo=local_timezone)
+print("System: Đang lấy múi giờ của người dùng...")
+city_name = os.getenv('CITY', 'hanoi') # Lấy thành phố từ .env
+shared_context.user_timezone = get_city_timezone(city_name) # Lấy và gán vào context chung
+print(f"System: Múi giờ được đặt thành {shared_context.user_timezone}")
+
+# Đặt giờ chạy cho tác vụ hàng ngày
+run_time = datetime.time(hour=7, minute=0, second=0, tzinfo=shared_context.user_timezone)
 
 # ---------------------------------------------------------
 # ĐỊNH NGHĨA TÁC VỤ NỀN (CRONJOB) -> GỬI DM
@@ -285,7 +290,7 @@ async def check_notifications():
     global notifications_data
     
     # 1. Lấy thời gian hiện tại theo phút (bỏ giây và micro giây để so sánh khớp tuyệt đối)
-    now = datetime.datetime.now(local_timezone)
+    now = datetime.datetime.now(shared_context.user_timezone)
     
     # Danh sách các mốc thời gian cần xóa sau khi xử lý
     to_remove = []

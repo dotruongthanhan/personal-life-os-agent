@@ -4,6 +4,7 @@ import asyncio
 from google import genai
 from dotenv import load_dotenv
 from tools_config import tools, available_functions
+import shared_context
 
 load_dotenv()
 
@@ -12,9 +13,10 @@ MODEL_ID = "gemini-3.1-flash-lite-preview"
 
 async def function_call_execution(channel, prompt: str):
     try:
+        now = datetime.datetime.now(shared_context.user_timezone)
         system_instruction = f"""Bạn là Life-OS Agent thông minh, trợ lý ảo cá nhân cho người dùng để thông báo, thêm, thay đổi thông tin sự kiện trên Google Calendar và cung cấp dữ liệu thời tiết. Hãy trả lời ngắn gọn, súc tích và ưu tiên gọi hàm khi cần thao tác với lịch hoặc thời tiết.
                                 Chức năng chính của bạn là Function Call. Khi người dùng gửi yêu cầu cần gọi hàm, chú ý dùng đúng tên hàm và định dạng argument theo đúng tools.
-                                Context: hôm nay là ngày {datetime.datetime.now().strftime("%d/%m/%Y")}"""
+                                Context: hôm nay là ngày {now.strftime("%d/%m/%Y")} và múi giờ của người dùng là {now.tzname()}."""
         # Lượt 1: Gửi tin nhắn ban đầu
         interaction = await asyncio.to_thread(
             client_gemini.interactions.create,
